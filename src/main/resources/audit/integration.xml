@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:int="http://www.springframework.org/schema/integration"
+	xmlns:int-jdbc="http://www.springframework.org/schema/integration/jdbc"
+	xmlns:task="http://www.springframework.org/schema/task"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+		http://www.springframework.org/schema/integration http://www.springframework.org/schema/integration/spring-integration.xsd
+		http://www.springframework.org/schema/integration/jdbc http://www.springframework.org/schema/integration/jdbc/spring-integration-jdbc.xsd
+		http://www.springframework.org/schema/task http://www.springframework.org/schema/task/spring-task.xsd">
+	
+	
+	<int-jdbc:inbound-channel-adapter
+		query="${audit.select.query}"
+		data-source="dataSource" channel="fetchedChannel"
+		update="${audit.update.query}"
+		max-rows-per-poll="${audit.poller.maxrowsperpoll}"
+		select-sql-parameter-source="parameterSource">
+		
+		<int:poller task-executor="taskExecutor" fixed-delay="${audit.scheduling.delay}" time-unit="MINUTES">
+			<int:transactional/>
+		</int:poller>
+		
+	</int-jdbc:inbound-channel-adapter>
+	
+	<bean id="mp" class="net.hrkac.fromdb.service.MessagePrinter"/>
+	
+	<int:service-activator ref="mp" method="print" input-channel="fetchedChannel" />
+	
+	<int:channel id="fetchedChannel"/>
+	<int:channel id="failedChannel"/>
+	<int:channel id="successChannel"/>
+	
+	<task:executor id="taskExecutor" pool-size="1" queue-capacity="1"/>
+
+	<bean id="parameterSource" factory-bean="parameterSourceFactory" factory-method="createParameterSourceNoCache">
+		<constructor-arg value="" />
+	</bean>
+
+	<bean id="parameterSourceFactory" class="org.springframework.integration.jdbc.ExpressionEvaluatingSqlParameterSourceFactory">
+		<property name="parameterExpressions">
+			<map>
+				<entry key="thresholdDate" value="T(net.hrkac.fromdb.util.AuditUtils).thresholdDate(${audit.offset.minutes})" />
+			</map>
+		</property>
+	</bean>	
+
+</beans>
